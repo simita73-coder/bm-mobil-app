@@ -287,7 +287,11 @@ public class BmPlugin extends Plugin {
                 arr.put(c.getLong(i));
                 break;
             case Cursor.FIELD_TYPE_FLOAT:
-                arr.put(c.getDouble(i));
+                try {
+                    arr.put(c.getDouble(i));
+                } catch (Exception e) {
+                    arr.put(JSONObject.NULL);
+                }
                 break;
             case Cursor.FIELD_TYPE_STRING:
                 arr.put(c.getString(i));
