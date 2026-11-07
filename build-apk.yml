@@ -27,10 +27,6 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: ''
-
       - name: Csomagok telepítése
         run: npm ci
 
