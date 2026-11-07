@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1117">
+<title>BM Mobil</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+button{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:pointer;font-family:inherit}
+
+:root{
+  --bg:#0f1117;--bg2:#1a1d27;--bg3:#222636;--bg4:#2a2f45;
+  --txt:#e8eaf0;--txt2:#9aa0b8;--txt3:#6b7289;
+  --blue:#4a9eff;--blue2:#1a3a6a;--blue3:#0d2040;
+  --red:#ff5a5a;--red2:#6a1a1a;
+  --green:#4acd8d;--green2:#0d3d28;
+  --amber:#e8b64a;--amber2:#4a3a0d;
+  --purple:#b085f5;--purple2:#2e1a4a;
+  --border:#252a3d;--border2:#353b55;
+  --r:10px;--r2:6px;--r3:20px;
+  --nav-icon-color:#9aa0b8;
+  --tag-chip-color:#9aa0b8;
+  --domain-chip-color:#4a9eff;
+  --date-chip-color:#6b7289;
+  --note-color:#4a9eff;
+  --url-color:#9aa0b8;
+  --stats-color:#9aa0b8;
+  --sat:max(env(safe-area-inset-top,0px),var(--safe-area-inset-top,0px));
+  --sab:max(env(safe-area-inset-bottom,0px),var(--safe-area-inset-bottom,0px));
+  --sal:max(env(safe-area-inset-left,0px),var(--safe-area-inset-left,0px));
+  --sar:max(env(safe-area-inset-right,0px),var(--safe-area-inset-right,0px));
+}
+body.light{
+  --bg:#f5f5f7;--bg2:#ffffff;--bg3:#f0f0f2;--bg4:#e4e4e8;
+  --txt:#1a1a1e;--txt2:#4a4a54;--txt3:#888896;
+  --blue:#1a6fd4;--blue2:#dbeafe;--blue3:#eff6ff;
+  --red:#cc2222;--red2:#fde8e8;
+  --green:#1a7a4a;--green2:#dcfce7;
+  --amber:#9a6500;--amber2:#fef9c3;
+  --purple:#6b21a8;--purple2:#f3e8ff;
+  --border:#d8d8e0;--border2:#c4c4cc;
+  --nav-icon-color:#4a4a54;--tag-chip-color:#4a4a54;
+  --domain-chip-color:#1a6fd4;--date-chip-color:#888896;
+  --note-color:#1a6fd4;--url-color:#4a4a54;--stats-color:#4a4a54;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg)}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--txt)}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;padding-left:var(--sal);padding-right:var(--sar)}
+
+/* ── FEJLÉC ── */
+#header{background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 12px;padding-top:calc(8px + var(--sat));display:flex;align-items:center;gap:6px;flex-shrink:0}
+#header h1{font-size:14px;font-weight:700;flex:1;min-width:0}
+#header h1 small{display:block;font-size:10px;font-weight:400;color:var(--txt3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb{background:#000;border:1px solid rgba(255,255,255,0.3);color:var(--txt);border-radius:var(--r2);padding:7px 10px;font-size:13px;font-weight:500;flex-shrink:0;white-space:nowrap}
+body.light .hb{background:#fff;border-color:rgba(0,0,0,0.25)}
+.hb.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.hb:active{opacity:.7}
+
+/* ── KERESÉS ── */
+#search-row{background:var(--bg2);border-bottom:1px solid var(--border);padding:6px 10px;flex-shrink:0;display:flex;gap:6px;align-items:center}
+#search-input{flex:1;background:#000;border:1px solid rgba(255,255,255,0.25);border-radius:var(--r2);color:var(--txt);padding:7px 10px;font-size:16px;outline:none;min-width:0}
+body.light #search-input{background:#fff;border-color:rgba(0,0,0,0.2)}
+#search-input:focus{border-color:var(--blue)}
+#search-input::placeholder{color:var(--txt3)}
+
+/* ── SOROK ── */
+#nav-row,#mode-row{background:var(--bg2);border-bottom:1px solid var(--border);padding:5px 10px;flex-shrink:0;display:flex;gap:5px}
+.nb{flex:1;background:#000;border:1px solid rgba(255,255,255,0.28);color:var(--nav-icon-color);border-radius:var(--r2);padding:9px 4px;font-size:18px;text-align:center;line-height:1}
+body.light .nb{background:#fff;border-color:rgba(0,0,0,0.22)}
+.nb.on        {background:var(--blue2);  border-color:var(--blue);  color:var(--blue)!important}
+.nb.on-green  {background:var(--green2); border-color:var(--green); color:var(--green)!important}
+.nb.on-amber  {background:var(--amber2); border-color:var(--amber); color:var(--amber)!important}
+.nb.on-red    {background:var(--red2);   border-color:var(--red);   color:var(--red)!important}
+.nb.on-purple {background:var(--purple2);border-color:var(--purple);color:var(--purple)!important}
+.nb:active{opacity:.7;transform:scale(.95)}
+
+/* ── STATISZTIKA ── */
+#stats-row{padding:5px 14px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg);display:flex;flex-direction:column;gap:3px}
+.stats-line{display:flex;align-items:center;gap:12px;flex-wrap:nowrap}
+.stats-line span{font-size:12px;color:var(--txt3);white-space:nowrap}
+.stats-line span b{color:var(--stats-color);font-weight:600}
+
+/* ── CIKK TERÜLET ── */
+#card-area{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 14px 10px}
+
+.card-domain-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:nowrap;overflow:hidden}
+.domain-chip{font-size:12px;font-weight:700;color:var(--domain-chip-color);background:#000;border:1px solid var(--domain-chip-color);padding:4px 12px;border-radius:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;flex-shrink:0}
+body.light .domain-chip{background:#fff}
+.date-chip{font-size:12px;font-weight:600;color:var(--date-chip-color);border:1px solid var(--date-chip-color);padding:3px 10px;border-radius:12px;white-space:nowrap;flex-shrink:0}
+.tags-toggle-btn{background:none;border:1px solid var(--border2);color:var(--txt3);font-size:11px;padding:3px 7px;border-radius:var(--r2);flex-shrink:0;line-height:1}
+.tags-toggle-btn:active{opacity:.7}
+.card-status-icons{font-size:14px;margin-left:auto;white-space:nowrap;flex-shrink:0;letter-spacing:2px}
+
+#card-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.tag-chip{color:var(--tag-chip-color);border:1px solid var(--tag-chip-color);background:#000;border-radius:4px;padding:3px 9px;font-size:12px;white-space:nowrap}
+body.light .tag-chip{background:#fff}
+
+.card-title{font-size:20px;font-weight:700;line-height:1.4;color:var(--txt);margin-bottom:12px;overflow-wrap:break-word;word-break:break-word}
+.card-note{font-size:13px;color:var(--note-color);line-height:1.65;margin-bottom:12px;background:#000;border-radius:var(--r2);padding:10px 12px;border:2px solid var(--note-color);overflow-wrap:break-word;word-break:break-word;white-space:pre-wrap}
+body.light .card-note{background:#fff}
+.card-url{font-size:11px;color:var(--url-color);word-break:break-all;overflow-wrap:break-word;line-height:1.5}
+
+#empty-state{display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px 20px;text-align:center}
+#empty-state .ico{font-size:52px;opacity:.25}
+#empty-state p{font-size:14px;color:var(--txt3);line-height:1.7;max-width:280px}
+
+/* ── ALSÓ GOMBSOR ── */
+#bottom-bar{background:var(--bg2);border-top:1px solid var(--border);padding:8px 10px;padding-bottom:calc(8px + var(--sab));flex-shrink:0;display:flex;gap:6px}
+.actbtn{flex:1;border:1px solid rgba(255,255,255,0.28);border-radius:8px;height:54px;font-size:26px;display:flex;align-items:center;justify-content:center;-webkit-user-select:none;user-select:none}
+body.light .actbtn{border-color:rgba(0,0,0,0.2)}
+.actbtn.open{background:var(--green2);color:var(--green);touch-action:none}
+.actbtn.prot{background:var(--purple2);color:var(--purple)}
+.actbtn.prot.on{background:var(--purple);color:#fff}
+.actbtn.read{background:var(--amber2);color:var(--amber)}
+.actbtn.read.on{background:var(--amber);color:#1a1a1a}
+.actbtn.del{background:var(--red2);color:var(--red)}
+.actbtn:active{opacity:.75;transform:scale(.95)}
+
+/* ── MODÁLIS ABLAKOK ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:flex-end;justify-content:center;z-index:100}
+.modal-overlay.show{display:flex}
+.modal{background:var(--bg2);border-radius:var(--r) var(--r) 0 0;width:100%;max-width:600px;border-top:1px solid var(--border2);max-height:88vh;max-height:88dvh;display:flex;flex-direction:column}
+.modal-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.modal-hdr h2{font-size:15px;font-weight:600}
+.modal-close{background:none;border:none;color:var(--txt2);font-size:22px;padding:4px 8px;line-height:1}
+.modal-body{padding:14px 18px;padding-bottom:calc(14px + var(--sab));overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px}
+.big-btn{background:var(--blue);color:#fff;border:none;border-radius:var(--r);padding:14px;font-size:15px;font-weight:600;width:100%}
+.big-btn2{background:var(--bg3);color:var(--txt2);border:1px solid var(--border2);border-radius:var(--r);padding:12px;font-size:14px;width:100%}
+.big-btn.danger{background:var(--red2);color:var(--red);border:1px solid var(--red)}
+.big-btn:active,.big-btn2:active{opacity:.8}
+.box{padding:10px 12px;border:1px solid var(--border2);border-radius:var(--r2);background:var(--bg3);font-size:13px;line-height:1.5}
+.box.ok{border-color:var(--green)}
+.box.no{border-color:var(--red)}
+.check-row{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.check-row:last-child{border-bottom:none}
+.check-row input[type=checkbox],.check-row input[type=radio]{width:20px;height:20px;accent-color:var(--blue);flex-shrink:0}
+.check-row label{font-size:15px;color:var(--txt);flex:1}
+.txt-input{width:100%;background:#000;border:1px solid rgba(255,255,255,0.25);border-radius:var(--r2);color:var(--txt);padding:10px 12px;font-size:16px;outline:none;min-width:0}
+body.light .txt-input{background:#fff;border-color:rgba(0,0,0,0.2)}
+.txt-input:focus{border-color:var(--blue)}
+.mono{font-family:ui-monospace,monospace;font-size:13px}
+.field-label{font-size:11px;color:var(--txt3);margin-bottom:-4px}
+.row2{display:flex;gap:8px}
+.row2>*{min-width:0}
+#tags-article-title{font-size:13px;color:var(--txt3);line-height:1.5;padding:8px;background:var(--bg3);border-radius:var(--r2);overflow-wrap:break-word}
+.tags-save-btn{background:var(--blue);color:#fff;border:none;border-radius:var(--r2);padding:9px 14px;font-size:13px;font-weight:600;flex-shrink:0}
+.tags-section-label{font-size:11px;color:var(--txt3)}
+.tags-chips{display:flex;flex-wrap:wrap;gap:6px;max-height:34vh;overflow-y:auto}
+.top-tag{background:#000;color:var(--tag-chip-color);border:1px solid var(--tag-chip-color);border-radius:var(--r3);padding:6px 14px;font-size:12px}
+body.light .top-tag{background:#fff}
+.top-tag:active{opacity:.7}
+
+.section{margin-bottom:6px;padding-bottom:14px;border-bottom:2px solid var(--blue);display:flex;flex-direction:column;gap:8px}
+.section h3{font-size:13px;font-weight:600;color:var(--blue)}
+.section.danger-sec{border-bottom-color:var(--red)}
+.section.danger-sec h3{color:var(--red)}
+.info{font-size:10.5px;color:var(--txt3);line-height:1.55}
+.path-save{background:var(--blue);color:#fff;border:none;border-radius:var(--r2);padding:8px 12px;font-size:12px;font-weight:600;flex-shrink:0;white-space:nowrap}
+.color-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.color-row:last-of-type{border-bottom:none}
+.color-row label{font-size:13px;color:var(--txt2);flex:1;line-height:1.4}
+.hex-input{width:90px;background:#000;border:1px solid rgba(255,255,255,0.25);border-radius:var(--r2);color:var(--txt);padding:6px 8px;font-size:14px;font-family:monospace;outline:none;flex-shrink:0}
+body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
+.hex-input:focus{border-color:var(--blue)}
+.col-preview{width:26px;height:26px;border-radius:50%;border:2px solid var(--border2);flex-shrink:0}
+.color-apply-row{display:flex;gap:8px;margin-top:4px}
+.color-apply-btn{flex:1;background:var(--blue);color:#fff;border:none;border-radius:var(--r2);padding:11px;font-size:14px;font-weight:600}
+.color-reset-btn{flex:1;background:var(--bg3);color:var(--txt2);border:1px solid var(--border2);border-radius:var(--r2);padding:11px;font-size:14px}
+.color-apply-btn:active,.color-reset-btn:active{opacity:.8}
+
+#toast{position:fixed;bottom:calc(84px + var(--sab));left:50%;transform:translateX(-50%);background:var(--bg4);border:1px solid var(--border2);color:var(--txt);padding:9px 18px;border-radius:var(--r3);font-size:13px;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none;max-width:92vw;text-align:center}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="header">
+    <h1>BM Mobil <span id="ver">v2.0</span> <small id="db-lbl">Nincs adatbázis megnyitva</small></h1>
+    <button class="hb" id="toggle-rows-btn" title="Sorok elrejtése">▲</button>
+    <button class="hb" id="theme-btn">🌙</button>
+    <button class="hb primary" id="db-btn">📂 DB</button>
+  </div>
+
+  <div id="search-row">
+    <input type="search" id="search-input" placeholder="Keresés...">
+    <button class="hb" id="search-fields-btn">🔍 Miben ▾</button>
+  </div>
+
+  <!-- 1. gombsor: rendezés | véletlen | beállítások | visszavonás | címkék -->
+  <div id="nav-row">
+    <button class="nb" id="btn-sort"     title="Rendezés ID szerint (váltó)">↕</button>
+    <button class="nb on" id="btn-shuffle" title="Véletlen sorrend">🔀</button>
+    <button class="nb" id="btn-colors"   title="Beállítások">⚙️</button>
+    <button class="nb" id="btn-undo"     title="Visszavonás">↩</button>
+    <button class="nb" id="btn-tags-open" title="Címkék szerkesztése">🏷</button>
+  </div>
+
+  <!-- 2. gombsor: hiányzó adat | védett | olvasásra vár | törlésre vár | mind -->
+  <div id="mode-row">
+    <button class="nb" id="btn-mode-missing" title="Hiányzó adat (címke / tartalom / cím / dátum)">❓</button>
+    <button class="nb" id="btn-mode-prot"    title="Védett">🔐</button>
+    <button class="nb" id="btn-mode-read"    title="Olvasásra vár">📖</button>
+    <button class="nb" id="btn-mode-del"     title="Törlésre vár">🗑</button>
+    <button class="nb on" id="btn-mode-all"  title="Mind">✨</button>
+  </div>
+
+  <div id="stats-row">
+    <div class="stats-line">
+      <span>Σ <b id="stat-total">–</b></span>
+      <span>❤️ <b id="stat-live">–</b></span>
+      <span>🗑 <b id="stat-pend">–</b></span>
+      <span>🔒 <b id="stat-prot">–</b></span>
+    </div>
+    <div class="stats-line">
+      <span># <b id="stat-id">–</b></span>
+      <span>📍 <b id="stat-pos">–</b></span>
+      <span>📖 <b id="stat-read">–</b></span>
+    </div>
+  </div>
+
+  <div id="card-area">
+    <div id="empty-state">
+      <div class="ico">📚</div>
+      <p id="empty-msg">Nincs adatbázis megnyitva.<br><br>Koppints a 📂 DB gombra.</p>
+    </div>
+    <div id="card-content" style="display:none">
+      <div class="card-domain-row">
+        <span class="domain-chip" id="card-domain">–</span>
+        <span class="date-chip"   id="card-date">–</span>
+        <button class="tags-toggle-btn" id="tags-toggle-btn" style="display:none">▲</button>
+        <span class="card-status-icons" id="card-status-icons"></span>
+      </div>
+      <div id="card-tags"></div>
+      <div class="card-title" id="card-title">–</div>
+      <div class="card-note"  id="card-note"  style="display:none"></div>
+      <div class="card-url"   id="card-url"></div>
+    </div>
+  </div>
+
+  <div id="bottom-bar">
+    <button class="actbtn open" id="act-open" title="Rövid: web | Hosszú (3mp): offline MHTML">🌐</button>
+    <button class="actbtn prot" id="act-prot" title="Védelem">🔒</button>
+    <button class="actbtn read" id="act-read" title="Olvasni">📖</button>
+    <button class="actbtn del"  id="act-del"  title="Törlés">🗑</button>
+  </div>
+</div>
+
+<!-- DB MODAL -->
+<div class="modal-overlay" id="db-modal-overlay">
+  <div class="modal">
+    <div class="modal-hdr"><h2>📂 Adatbázis</h2><button class="modal-close" data-close="db-modal-overlay">✕</button></div>
+    <div class="modal-body">
+      <div class="box" id="perm-box">Engedély állapota: ellenőrzés…</div>
+      <button class="big-btn2" id="perm-btn" style="display:none">🔑 Engedély megadása</button>
+      <div class="field-label">A bookmarks.db útvonala a telefonon</div>
+      <input type="text" id="db-path-input" class="txt-input mono" autocapitalize="off" autocomplete="off" spellcheck="false">
+      <button class="big-btn" id="db-open-btn">📂 Megnyitás / újratöltés</button>
+      <button class="big-btn2" id="db-default-btn">↩ Alapértelmezett útvonal</button>
+      <p class="info">Az app közvetlenül ebbe a fájlba olvas és ír (a Mega-mappában lévő fájlba), nincs külön mentés vagy export. Minden módosítás azonnal a fájlba kerül.</p>
+    </div>
+  </div>
+</div>
+
+<!-- KERESÉS MODAL -->
+<div class="modal-overlay" id="search-modal-overlay">
+  <div class="modal">
+    <div class="modal-hdr"><h2>🔍 Miben keressen?</h2><button class="modal-close" data-close="search-modal-overlay">✕</button></div>
+    <div class="modal-body" style="gap:0">
+      <div class="check-row"><input type="checkbox" id="chk-tags" checked><label for="chk-tags">🏷 Saját Címkék <small style="color:var(--txt3)">(alap)</small></label></div>
+      <div class="check-row"><input type="checkbox" id="chk-title"><label for="chk-title">📰 Cím</label></div>
+      <div class="check-row"><input type="checkbox" id="chk-domain"><label for="chk-domain">🌐 Domain</label></div>
+      <div class="check-row"><input type="checkbox" id="chk-date"><label for="chk-date">📅 Dátum</label></div>
+      <div class="check-row"><input type="checkbox" id="chk-id"><label for="chk-id"># ID</label></div>
+      <div class="check-row"><input type="checkbox" id="chk-url"><label for="chk-url">🔗 URL</label></div>
+      <div class="check-row" style="border-bottom:none"><input type="checkbox" id="chk-word"><label for="chk-word">🔤 Teljes szó egyezés</label></div>
+    </div>
+  </div>
+</div>
+
+<!-- HIÁNYZÓ ADAT MODAL -->
+<div class="modal-overlay" id="missing-modal-overlay">
+  <div class="modal">
+    <div class="modal-hdr"><h2>❓ Hiányzó adat szűrő</h2><button class="modal-close" data-close="missing-modal-overlay">✕</button></div>
+    <div class="modal-body">
+      <p class="info" style="font-size:12px">Jelöld be, melyik adat hiányzik (üres) a keresett cikkekből. A törlésre jelölt cikkeket nem mutatja.</p>
+      <div style="display:flex;flex-direction:column">
+        <div class="check-row"><input type="checkbox" id="miss-tags"><label for="miss-tags">🏷 Nincs saját címke</label></div>
+        <div class="check-row"><input type="checkbox" id="miss-note"><label for="miss-note">🤖 Nincs tartalom (AI jegyzet)</label></div>
+        <div class="check-row"><input type="checkbox" id="miss-title"><label for="miss-title">📰 Nincs cím</label></div>
+        <div class="check-row"><input type="checkbox" id="miss-date"><label for="miss-date">📅 Nincs dátum</label></div>
+      </div>
+      <div class="field-label">Több jelölésnél:</div>
+      <div style="display:flex;flex-direction:column">
+        <div class="check-row"><input type="radio" name="miss-logic" id="miss-or" value="or" checked><label for="miss-or">Legalább az egyik hiányzik (VAGY)</label></div>
+        <div class="check-row"><input type="radio" name="miss-logic" id="miss-and" value="and"><label for="miss-and">Mindegyik hiányzik (ÉS)</label></div>
+      </div>
+      <button class="big-btn" id="miss-apply-btn">✅ Alkalmaz</button>
+    </div>
+  </div>
+</div>
+
+<!-- CÍMKÉK MODAL -->
+<div class="modal-overlay" id="tags-modal-overlay">
+  <div class="modal">
+    <div class="modal-hdr"><h2>🏷 Címkék szerkesztése</h2><button class="modal-close" data-close="tags-modal-overlay">✕</button></div>
+    <div class="modal-body">
+      <div id="tags-article-title"></div>
+      <div class="field-label">Címke keresése az összes címke között (legalább 3 karakter)</div>
+      <input type="search" id="tag-search" class="txt-input" placeholder="Keresés a címkék között…" autocapitalize="off" autocomplete="off" spellcheck="false">
+      <div class="tags-section-label" id="tag-results-info" style="display:none"></div>
+      <div class="tags-chips" id="tag-results"></div>
+      <div class="field-label">A cikk címkéi (vesszővel elválasztva)</div>
+      <div class="row2">
+        <input type="text" id="tags-new-input" class="txt-input" placeholder="Vesszővel elválasztva..." style="flex:1" autocapitalize="off" autocomplete="off" spellcheck="false">
+        <button class="tags-save-btn" id="tags-save-btn">💾 Mentés</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BEÁLLÍTÁSOK MODAL -->
+<div class="modal-overlay" id="color-modal-overlay">
+  <div class="modal">
+    <div class="modal-hdr"><h2>⚙️ Beállítások</h2><button class="modal-close" data-close="color-modal-overlay">✕</button></div>
+    <div class="modal-body">
+      <div class="section">
+        <h3>📂 Offline MHTML mappa útvonala</h3>
+        <div class="row2">
+          <input type="text" id="mhtml-path-input" class="txt-input mono" style="flex:1" autocapitalize="off" autocomplete="off" spellcheck="false">
+          <button class="path-save" id="mhtml-path-save">💾 Mentés</button>
+        </div>
+        <div class="info">Hosszú nyomás (3 mp) a 🌐 gombon: az app az ID alapján keresi a fájlt (…_id123_….mhtml), és megnyitja. Ha nincs ilyen fájl, a weboldal nyílik meg.</div>
+      </div>
+
+      <div class="section danger-sec">
+        <h3>🗑 Törlésre jelöltek végleges törlése</h3>
+        <button class="big-btn danger" id="del-all-pending-btn">🗑 Összes törlésre jelölt törlése</button>
+        <div class="info" id="del-all-info">Az összes törlésre jelölt cikket véglegesen törli az adatbázisból, a dátumtól függetlenül. A védett cikkekhez és az MHTML fájlokhoz nem nyúl. Nem vonható vissza.</div>
+      </div>
+
+      <p class="info" style="font-size:11px">Színek – hex kód: #rrggbb – pl. #ff5a5a (piros), #4acd8d (zöld), #e8b64a (narancs), #b085f5 (lila)</p>
+      <div class="color-row"><label>Nav gombok ikonjai<br><small style="color:var(--txt3)">⬆⬇🔀↩▲▼</small></label><input type="text" id="col-nav"    class="hex-input" placeholder="#9aa0b8"><div class="col-preview" id="prev-nav"></div></div>
+      <div class="color-row"><label>Cikk-chipek keret+betű<br><small style="color:var(--txt3)">Saját címkék</small></label><input type="text" id="col-tag"    class="hex-input" placeholder="#9aa0b8"><div class="col-preview" id="prev-tag"></div></div>
+      <div class="color-row"><label>Domain chip keret+betű</label><input type="text" id="col-domain" class="hex-input" placeholder="#4a9eff"><div class="col-preview" id="prev-domain"></div></div>
+      <div class="color-row"><label>Dátum chip keret+betű</label><input type="text" id="col-date"   class="hex-input" placeholder="#6b7289"><div class="col-preview" id="prev-date"></div></div>
+      <div class="color-row"><label>AI tartalom keret+betű</label><input type="text" id="col-note"   class="hex-input" placeholder="#4a9eff"><div class="col-preview" id="prev-note"></div></div>
+      <div class="color-row"><label>URL szín</label><input type="text" id="col-url"    class="hex-input" placeholder="#9aa0b8"><div class="col-preview" id="prev-url"></div></div>
+      <div class="color-row"><label>Számok színe<br><small style="color:var(--txt3)">Statisztika sáv</small></label><input type="text" id="col-stats"  class="hex-input" placeholder="#9aa0b8"><div class="col-preview" id="prev-stats"></div></div>
+      <div class="color-apply-row">
+        <button class="color-apply-btn" id="color-apply-btn">✅ Alkalmaz</button>
+        <button class="color-reset-btn" id="color-reset-btn">↩ Alapért.</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MEGOSZTÁS MODAL (új könyvjelző) -->
+<div class="modal-overlay" id="share-modal-overlay">
+  <div class="modal">
+    <div class="modal-hdr"><h2>➕ Új könyvjelző</h2><button class="modal-close" data-close="share-modal-overlay">✕</button></div>
+    <div class="modal-body">
+      <div class="field-label">Webcím</div>
+      <input type="text" id="share-url" class="txt-input mono" autocapitalize="off" autocomplete="off" spellcheck="false">
+      <div class="field-label">Cím</div>
+      <input type="text" id="share-title" class="txt-input" autocomplete="off">
+      <p class="info">A címke és a tartalom üres marad, azt később a Windowsos BM program tölti fel.</p>
+      <button class="big-btn" id="share-save-btn">💾 Hozzáadás az adatbázishoz</button>
+      <button class="big-btn2" data-close="share-modal-overlay">Mégse</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

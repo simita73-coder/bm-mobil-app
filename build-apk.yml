@@ -1,0 +1,68 @@
+name: APK építése
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Csomagok telepítése
+        run: npm ci
+
+      - name: Weboldal csomagolása
+        run: npm run build
+
+      - name: Android projekt létrehozása
+        run: npx cap add android
+
+      - name: Android projekt kiegészítése (engedélyek, saját plugin, megosztás)
+        run: python3 scripts/patch_android.py
+
+      - name: Szinkronizálás
+        run: npx cap sync android
+
+      - name: APK építése
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: APK előkészítése
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk bm-mobil.apk
+
+      - name: Közvetlen letöltési hivatkozás (Releases)
+        run: |
+          gh release delete apk-legfrissebb --cleanup-tag --yes || true
+          gh release create apk-legfrissebb bm-mobil.apk \
+            --title "Legfrissebb BM Mobil APK" \
+            --notes "BM Mobil – automatikusan épített debug APK. Commit: ${{ github.sha }}" \
+            --target ${{ github.sha }}
+
+      - name: APK mentése a futáshoz is (Artifacts)
+        uses: actions/upload-artifact@v4
+        with:
+          name: bm-mobil-apk
+          path: bm-mobil.apk
