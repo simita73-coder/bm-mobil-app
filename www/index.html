@@ -74,6 +74,10 @@ body.light .nb{background:#fff;border-color:rgba(0,0,0,0.22)}
 .nb.on-red    {background:var(--red2);   border-color:var(--red);   color:var(--red)!important}
 .nb.on-purple {background:var(--purple2);border-color:var(--purple);color:var(--purple)!important}
 .nb:active{opacity:.7;transform:scale(.95)}
+.nb.mb{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:0;padding:10px 1px 8px}
+.mb .mi{font-size:19px;line-height:1}
+.mb .mn{font-size:11px;font-weight:600;line-height:1;color:var(--stats-color);white-space:nowrap}
+.mb .mn.long{font-size:10.5px;letter-spacing:-.2px}
 
 /* ── STATISZTIKA ── */
 #stats-row{padding:5px 14px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg);display:flex;flex-direction:column;gap:3px}
@@ -150,6 +154,13 @@ body.light .txt-input{background:#fff;border-color:rgba(0,0,0,0.2)}
 .top-tag{background:#000;color:var(--tag-chip-color);border:1px solid var(--tag-chip-color);border-radius:var(--r3);padding:6px 14px;font-size:12px}
 body.light .top-tag{background:#fff}
 .top-tag:active{opacity:.7}
+.top-tag.new-tag{border-style:dashed}
+.actbtn.offline{outline:2px solid var(--tag-chip-color);outline-offset:-2px}
+.mg-line{font-size:12.5px;line-height:1.6}
+.mg-line b{color:var(--txt)}
+.mg-file small{display:block;color:var(--txt3);font-size:11px;margin-top:2px}
+.mg-file.off label{color:var(--txt3)}
+#merge-log,#mhtml-result{white-space:pre-wrap;font-size:12.5px;line-height:1.6}
 
 .section{margin-bottom:6px;padding-bottom:14px;border-bottom:2px solid var(--blue);display:flex;flex-direction:column;gap:8px}
 .section h3{font-size:13px;font-weight:600;color:var(--blue)}
@@ -177,7 +188,7 @@ body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
 <div id="app">
 
   <div id="header">
-    <h1>BM Mobil <span id="ver">v2.0</span> <small id="db-lbl">Nincs adatbázis megnyitva</small></h1>
+    <h1>BM Mobil <span id="ver">v3.0</span> <small id="db-lbl">Nincs adatbázis megnyitva</small></h1>
     <button class="hb" id="toggle-rows-btn" title="Sorok elrejtése">▲</button>
     <button class="hb" id="theme-btn">🌙</button>
     <button class="hb primary" id="db-btn">📂 DB</button>
@@ -199,24 +210,18 @@ body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
 
   <!-- 2. gombsor: hiányzó adat | védett | olvasásra vár | törlésre vár | mind -->
   <div id="mode-row">
-    <button class="nb" id="btn-mode-missing" title="Hiányzó adat (címke / tartalom / cím / dátum)">❓</button>
-    <button class="nb" id="btn-mode-prot"    title="Védett">🔐</button>
-    <button class="nb" id="btn-mode-read"    title="Olvasásra vár">📖</button>
-    <button class="nb" id="btn-mode-del"     title="Törlésre vár">🗑</button>
-    <button class="nb on" id="btn-mode-all"  title="Mind">✨</button>
+    <button class="nb mb" id="btn-mode-missing" title="Hiányzó adat (címke / tartalom / cím / dátum) – a szám a kijelölt hiányzó adatúaké"><span class="mi">❓</span><b class="mn" id="stat-miss">–</b></button>
+    <button class="nb mb" id="btn-mode-prot"    title="Védett cikkek"><span class="mi">🔐</span><b class="mn" id="stat-prot">–</b></button>
+    <button class="nb mb" id="btn-mode-read"    title="Olvasásra vár"><span class="mi">📖</span><b class="mn" id="stat-read">–</b></button>
+    <button class="nb mb" id="btn-mode-del"     title="Törlésre vár"><span class="mi">🗑</span><b class="mn" id="stat-pend">–</b></button>
+    <button class="nb mb on" id="btn-mode-all"  title="Mind: az új (nem olvasott, nem törlésre váró) cikkek száma"><span class="mi">✨</span><b class="mn" id="stat-live">–</b></button>
   </div>
 
   <div id="stats-row">
     <div class="stats-line">
       <span>Σ <b id="stat-total">–</b></span>
-      <span>❤️ <b id="stat-live">–</b></span>
-      <span>🗑 <b id="stat-pend">–</b></span>
-      <span>🔒 <b id="stat-prot">–</b></span>
-    </div>
-    <div class="stats-line">
       <span># <b id="stat-id">–</b></span>
       <span>📍 <b id="stat-pos">–</b></span>
-      <span>📖 <b id="stat-read">–</b></span>
     </div>
   </div>
 
@@ -240,7 +245,7 @@ body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
   </div>
 
   <div id="bottom-bar">
-    <button class="actbtn open" id="act-open" title="Rövid: web | Hosszú (3mp): offline MHTML">🌐</button>
+    <button class="actbtn open" id="act-open" title="Rövid: offline MHTML (ha van), különben web | Hosszú (3mp): csak web">🌐</button>
     <button class="actbtn prot" id="act-prot" title="Védelem">🔒</button>
     <button class="actbtn read" id="act-read" title="Olvasni">📖</button>
     <button class="actbtn del"  id="act-del"  title="Törlés">🗑</button>
@@ -316,6 +321,9 @@ body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
         <input type="text" id="tags-new-input" class="txt-input" placeholder="Vesszővel elválasztva..." style="flex:1" autocapitalize="off" autocomplete="off" spellcheck="false">
         <button class="tags-save-btn" id="tags-save-btn">💾 Mentés</button>
       </div>
+      <div class="tags-section-label" id="tags-suggest-info" style="display:none"></div>
+      <div class="tags-chips" id="tags-suggest"></div>
+      <p class="info">Mentéskor a címkék egységes alakra kerülnek (kisbetű, kivéve a betűszavakat; ismétlések és szélső jelek nélkül) – ugyanígy, mint a BM tisztításánál.</p>
     </div>
   </div>
 </div>
@@ -331,7 +339,18 @@ body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
           <input type="text" id="mhtml-path-input" class="txt-input mono" style="flex:1" autocapitalize="off" autocomplete="off" spellcheck="false">
           <button class="path-save" id="mhtml-path-save">💾 Mentés</button>
         </div>
-        <div class="info">Hosszú nyomás (3 mp) a 🌐 gombon: az app az ID alapján keresi a fájlt (…_id123_….mhtml), és megnyitja. Ha nincs ilyen fájl, a weboldal nyílik meg.</div>
+        <div class="info">Alapértelmezés: Norbi/BM-manager/MHTML. A 🌐 gomb rövid nyomására az app az ID alapján keresi a fájlt (…_id123_….mhtml, a Hír-Radarból exportált cikkeknél …_idHR…_….mhtml), és ha van, offline megnyitja; ha nincs, a weboldal nyílik meg. Hosszú nyomás (3 mp): mindig a weboldal.</div>
+        <label class="check-row" style="border-bottom:none"><input type="checkbox" id="mhtml-only-missing" checked><span style="font-size:14px;flex:1">Csak azok, amelyekhez még nincs MHTML fájl</span></label>
+        <div class="box mg-line" id="mhtml-summary">–</div>
+        <button class="big-btn" id="mhtml-list-btn">📄 MHTML lista kiírása (🔐 védettek)</button>
+        <div class="box" id="mhtml-result" style="display:none"></div>
+        <div class="info">A listába csak a 🔐 védett cikkek kerülnek. Sorok: ID|dátum|cím|URL – a fájl az adatbázis mellé kerül (mhtml_lista_ÉÉÉÉHHNN_ÓÓPP.txt), az MHTML mentő ezt olvassa be. Hogy melyik cikk van már lementve, azt a mappában lévő fájlok mutatják.</div>
+      </div>
+
+      <div class="section">
+        <h3>🔀 Összevonás másik bookmarks.db-vel</h3>
+        <button class="big-btn" id="merge-open-btn">🔀 Összevonás megnyitása…</button>
+        <div class="info">Két bookmarks.db cikkeinek egyesítése (mindkét irányban); közben az összes cikk címkéi egységes alakra javulnak. Előtte automatikus biztonsági mentés.</div>
       </div>
 
       <div class="section danger-sec">
@@ -352,6 +371,31 @@ body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
         <button class="color-apply-btn" id="color-apply-btn">✅ Alkalmaz</button>
         <button class="color-reset-btn" id="color-reset-btn">↩ Alapért.</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ÖSSZEVONÁS MODAL -->
+<div class="modal-overlay" id="merge-modal-overlay">
+  <div class="modal">
+    <div class="modal-hdr"><h2>🔀 Összevonás másik bookmarks.db-vel</h2><button class="modal-close" data-close="merge-modal-overlay">✕</button></div>
+    <div class="modal-body">
+      <div class="field-label">A másik bookmarks.db mappája (a megnyitott adatbázis ide nem lehet)</div>
+      <input type="text" id="merge-dir" class="txt-input mono" autocapitalize="off" autocomplete="off" spellcheck="false">
+      <button class="big-btn2" id="merge-scan-btn">🔎 Fájl keresése</button>
+      <div style="display:flex;flex-direction:column">
+        <div class="check-row mg-file" id="mgrow-bm" style="border-bottom:none"><input type="checkbox" id="mg-bm" disabled><label for="mg-bm">🔖 bookmarks.db<small id="mgst-bm">–</small></label></div>
+      </div>
+      <div class="field-label">Ha egy közös cikk leíró mezői (cím, kategória, jegyzet…) eltérnek, melyik oldal értéke maradjon? (A címkék, az olvasott / törlésre vár / védett állapot mindkét oldalról egyesül.)</div>
+      <div style="display:flex;flex-direction:column">
+        <div class="check-row"><input type="radio" name="mg-prim" id="mg-prim-phone" value="phone" checked><label for="mg-prim-phone">📂 A megnyitott adatbázisé</label></div>
+        <div class="check-row" style="border-bottom:none"><input type="radio" name="mg-prim" id="mg-prim-desk" value="desk"><label for="mg-prim-desk">📄 A másik fájlé</label></div>
+      </div>
+      <button class="big-btn2" id="merge-preview-btn" disabled>📋 Előnézet</button>
+      <div class="box mg-line" id="merge-preview" style="display:none"></div>
+      <button class="big-btn" id="merge-run-btn" disabled>✅ Összevonás indítása</button>
+      <div class="box" id="merge-result" style="display:none"><div id="merge-log"></div></div>
+      <p class="info">A megnyitott adatbázisba ír; a másik fájlt nem módosítja. Indítás előtt a megnyitott fájlról másolat készül a mappa <b>mentes</b> almappájába (a legutóbbi 2 marad meg). Minden cikk címkéi a tag_clean szabályai szerint javulnak (idézőjelek, szögletes zárójelek, nagybetűk, ismétlések); a jelentésükben téves címkéket nem bírálja el.</p>
     </div>
   </div>
 </div>

@@ -1,11 +1,12 @@
-# BM Mobil (Android, v2.0)
+# BM Mobil (Android, v3.0)
 
 A `bm_mobil_v1_4.html` Android-változata. Ugyanaz a felület, de natív SQLite-tal, közvetlenül a telefon
 tárhelyén (a Mega-mappában) lévő `bookmarks.db`-vel dolgozik: nincs fájlválasztás, export vagy kézi visszamásolás.
 
 ## Alapértelmezett útvonalak (átírhatók az appban)
 - adatbázis: `/storage/emulated/0/Norbi/bookmarks.db` (📂 DB gomb)
-- offline MHTML mappa: `/storage/emulated/0/Norbi/MHTML` (⚙️ Beállítások)
+- offline MHTML mappa: `/storage/emulated/0/Norbi/BM-manager/MHTML` (⚙️ Beállítások; a korábban elmentett egyéni útvonal megmarad)
+- összevonás mappája: `/storage/emulated/0/Norbi/Osszevonas` (a másik `bookmarks.db` itt keresendő)
 
 ## Első indítás
 1. Az app kéri a „Minden fájl kezelése" engedélyt (📂 DB ablak → Engedély megadása) → kapcsold be, majd lépj vissza.
@@ -13,13 +14,33 @@ tárhelyén (a Mega-mappában) lévő `bookmarks.db`-vel dolgozik: nincs fájlv�
 
 ## Gombok
 **1. sor:** ⬆/⬇ rendezés ID szerint (1. nyomás: legkisebb ID elöl, utána váltakozik) · 🔀 véletlen · ⚙️ beállítások · ↩ visszavonás · 🏷 címkék
-**2. sor:** ❓ hiányzó adat (címke / tartalom / cím / dátum, VAGY/ÉS) · 🔐 védettek · 📖 olvasásra várók · 🗑 törlésre jelöltek · ✨ minden cikk
-**Alul:** 🌐 megnyitás (rövid: web az alapértelmezett böngészőben, 3 mp: offline MHTML az ID alapján) · 🔒 védelem · 📖 olvasni · 🗑 törlés
+**2. sor:** ❓ hiányzó adat (címke / tartalom / cím / dátum, VAGY/ÉS) · 🔐 védettek · 📖 olvasásra várók · 🗑 törlésre jelöltek · ✨ új (nem olvasott) cikkek – mindegyik alatt a darabszám, ugyanaz, mint a hozzá tartozó lista hossza (a ❓ száma a kijelölt hiányzó adatokat követi)
+**Alul:** 🌐/📄 megnyitás (rövid nyomás: offline MHTML, ha van hozzá fájl – ekkor 📄 a jel –, különben a webcím; hosszú nyomás, 3 mp: mindig a webcím) · 🔒 védelem · 📖 olvasni · 🗑 törlés
 Lapozás: húzás balra/jobbra a cikken.
 
 ## Címkék ablak
-A címke-mező fölötti keresőbe írt legalább 3 karakter után az **összes** címke közül listázza azokat,
-amelyekben bárhol szerepel a beírt szöveg. Koppintásra a címke a cikk címkéi közé kerül.
+- A címke-mező fölötti keresőbe írt legalább 3 karakter után az **összes** címke közül listázza azokat,
+  amelyekben bárhol szerepel a beírt szöveg. Koppintásra a címke a cikk címkéi közé kerül.
+- **Javaslatok gépelés közben** (v3.0): a „A cikk címkéi" mezőbe az utolsó vessző után gépelt szó 3. karakterétől felajánlja a meglévő címkéket.
+  Sorrend: pontos egyezés → egy szavas címkék (előbb amelyik a beírt szöveggel *kezdődik*, utána amelyik *tartalmazza*) → többszavas címkék (ugyanígy);
+  egy csoporton belül a gyakoribb elöl, utána betűrend. A „➕ új: …" lehetőség a lista végén áll.
+- Mentéskor a címkék egységes alakra kerülnek (tag_clean szabályai: idézőjelek / szögletes zárójelek le, kisbetű – a betűszavak és a `tag_case_map.json` szavai kivételével –, ismétlések ki).
+
+## Offline megnyitás (v3.0)
+A fájlt a mappában lévő név alapján találja meg: `…_id<ID>_….mhtml` (a BM-ből mentett cikk azonosítója), illetve `…_idHR<kód>_….mhtml`
+(a Hír-Radarból exportált cikk – a kód a webcímből számolódik). A mappa tartalma az egyetlen igazság: ami ott van, az offline nyílik meg.
+
+## 📄 MHTML lista a Vivaldi MHTML Mentőnek (v3.0, ⚙️)
+- Csak a 🔐 védett cikkek kerülnek a listába (a törlésre jelölt nem). Sor: `ID|dátum|cím|URL`, az ID a könyvjelző saját azonosítója.
+- „Csak azok, amelyekhez még nincs MHTML fájl" (alapból be): a mappában már megtalálható cikkeket kihagyja – akkor is, ha azokat a Hír-Radar listája mentette le.
+- A fájl az adatbázis mellé kerül: `mhtml_lista_ÉÉÉÉHHNN_ÓÓPP.txt`.
+
+## 🔀 Összevonás másik bookmarks.db-vel (v3.0, ⚙️)
+- A megnyitott adatbázisba ír; a másik fájlt (alapból `Norbi/Osszevonas/bookmarks.db`) csak olvassa. Előtte automatikus másolat a `Osszevonas/mentes/` mappába (a legutóbbi 2 marad).
+- A cikkek uniója **mindkét irányban**: ami csak a másikban van, bekerül; a közös cikkek (URL alapján) állapota és címkéi egyesülnek (🗑 > 📖 > új; a védelem bármelyik oldalról megmarad).
+  Ha a leíró mezők (cím, jegyzet…) eltérnek, a választott oldalé marad.
+- **Címkék**: az eredmény MINDEN sorának címkéi a tag_clean szabályai szerint javulnak (hibás alak javítva, nem törölve; a jelentésükben téves címkéket nem bírálja el). Az előnézet megmutatja, hány sort érint.
+- Az előnézet után indítható; a második futás már semmit nem változtat.
 
 ## Új funkciók Androidon
 - **Megosztás**: böngészőben Megosztás → BM Mobil → új könyvjelző (URL, domain, dátum, cím; a címkét és a tartalmat a Windowsos BM tölti fel később).
@@ -36,7 +57,8 @@ ezért az új verzió a régire közvetlenül ráfrissíthető, a beállítások
 
 ## Fájlok
 - `www/index.html`, `src/main.js` – a felület és a logika (a build `www/app.js`-t készít belőle)
-- `android-extra/BmPlugin.java` – natív rész: SQLite, link- és MHTML-megnyitás, megosztás fogadása
+- `android-extra/BmPlugin.java` – natív rész: SQLite (tranzakciós csomag), fájlok (olvasás/írás/másolás), MHTML-index, link- és MHTML-megnyitás, megosztás fogadása
+- `src/merge.js`, `src/tags.js`, `src/urlutil.js` – összevonás, címke-tisztítás (a tag_clean.py JS-átirata), URL-normalizálás / MHTML-azonosító
 - `android-extra/BmFileProvider.java`, `bm_file_paths.xml` – az MHTML fájl átadásához a böngészőnek
 - `android-extra/MainActivity.java` – a plugin regisztrálása, képernyő bekapcsolva tartása
 - `android-extra/debug.keystore` – állandó aláírókulcs

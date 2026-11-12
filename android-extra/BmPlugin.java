@@ -22,7 +22,15 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -287,11 +295,7 @@ public class BmPlugin extends Plugin {
                 arr.put(c.getLong(i));
                 break;
             case Cursor.FIELD_TYPE_FLOAT:
-                try {
-                    arr.put(c.getDouble(i));
-                } catch (Exception e) {
-                    arr.put(JSONObject.NULL);
-                }
+                arr.put(c.getDouble(i));
                 break;
             case Cursor.FIELD_TYPE_STRING:
                 arr.put(c.getString(i));
@@ -339,6 +343,316 @@ public class BmPlugin extends Plugin {
         try {
             db.execSQL(call.getString("sql"));
             call.resolve();
+        } catch (Exception e) {
+            call.reject(msg(e));
+        }
+    }
+
+    private static long execOne(SQLiteStatement st, String sql) {
+        String u = sql.trim().toUpperCase(Locale.ROOT);
+        if (u.startsWith("INSERT")) {
+            return st.executeInsert();
+        }
+        if (u.startsWith("UPDATE") || u.startsWith("DELETE") || u.startsWith("REPLACE")) {
+            return st.executeUpdateDelete();
+        }
+        st.execute();
+        return 0;
+    }
+
+    /** Több utasítás egyetlen tranzakcióban: ops=[{sql, params}, ...]. Válasz: {results:[...]}. */
+    @PluginMethod
+    public void batch(PluginCall call) {
+        if (db == null) {
+            call.reject("Nincs megnyitott adatbázis");
+            return;
+        }
+        try {
+            JSArray ops = call.getArray("ops");
+            JSArray results = new JSArray();
+            db.beginTransaction();
+            try {
+                if (ops != null) {
+                    for (int i = 0; i < ops.length(); i++) {
+                        JSONObject op = ops.getJSONObject(i);
+                        String sql = op.getString("sql");
+                        SQLiteStatement st = db.compileStatement(sql);
+                        try {
+                            bindAll(st, op.optJSONArray("params"));
+                            results.put(execOne(st, sql));
+                        } finally {
+                            st.close();
+                        }
+                    }
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+            JSObject r = new JSObject();
+            r.put("results", results);
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject(msg(e));
+        }
+    }
+
+    // ------------------------------------------------------------------ fájlok (összevonás, lista)
+
+    /** Kis szövegfájl beolvasása (pl. tag_case_map.json). Ha nincs ilyen fájl: {text:"", exists:false}. */
+    @PluginMethod
+    public void readText(PluginCall call) {
+        try {
+            File f = new File(call.getString("path", ""));
+            JSObject r = new JSObject();
+            if (!f.isFile() || f.length() > 2_000_000L) {
+                r.put("text", "");
+                r.put("exists", false);
+                call.resolve(r);
+                return;
+            }
+            FileInputStream in = new FileInputStream(f);
+            try {
+                byte[] buf = new byte[(int) f.length()];
+                int off = 0;
+                while (off < buf.length) {
+                    int n = in.read(buf, off, buf.length - off);
+                    if (n < 0) {
+                        break;
+                    }
+                    off += n;
+                }
+                r.put("text", new String(buf, 0, off, StandardCharsets.UTF_8));
+            } finally {
+                in.close();
+            }
+            r.put("exists", true);
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject(msg(e));
+        }
+    }
+
+    /** UTF-8 szövegfájl írása (a mappát létrehozza, a meglévő fájlt felülírja). */
+    @PluginMethod
+    public void writeText(PluginCall call) {
+        try {
+            String path = call.getString("path", "");
+            String text = call.getString("text", "");
+            if (path == null || path.isEmpty()) {
+                call.reject("Nincs útvonal");
+                return;
+            }
+            File f = new File(path);
+            File parent = f.getParentFile();
+            if (parent != null) {
+                parent.mkdirs();
+            }
+            FileOutputStream os = new FileOutputStream(f);
+            try {
+                os.write(text.getBytes(StandardCharsets.UTF_8));
+            } finally {
+                os.close();
+            }
+            JSObject o = new JSObject();
+            o.put("size", f.length());
+            call.resolve(o);
+        } catch (Exception e) {
+            call.reject(msg(e));
+        }
+    }
+
+    /** Fájl másolása ideiglenes névre, majd átnevezéssel; a célmappát létrehozza, a szabad helyet ellenőrzi. */
+    @PluginMethod
+    public void copyFile(PluginCall call) {
+        File tmp = null;
+        try {
+            File src = new File(call.getString("src", ""));
+            File dst = new File(call.getString("dst", ""));
+            if (!src.isFile()) {
+                call.reject("A másolandó fájl nem található: " + src.getPath());
+                return;
+            }
+            if (dst.exists()) {
+                call.reject("A célfájl már létezik: " + dst.getPath());
+                return;
+            }
+            File parent = dst.getParentFile();
+            if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+                call.reject("A mappa nem hozható létre: " + parent.getPath());
+                return;
+            }
+            if (parent != null && parent.getUsableSpace() < src.length() + 64L * 1024L * 1024L) {
+                call.reject("Nincs elég szabad hely a biztonsági másolathoz");
+                return;
+            }
+            tmp = new File(dst.getPath() + ".tmp");
+            FileInputStream in = new FileInputStream(src);
+            try {
+                FileOutputStream out = new FileOutputStream(tmp);
+                try {
+                    byte[] buf = new byte[1 << 16];
+                    int n;
+                    while ((n = in.read(buf)) > 0) {
+                        out.write(buf, 0, n);
+                    }
+                    out.getFD().sync();
+                } finally {
+                    out.close();
+                }
+            } finally {
+                in.close();
+            }
+            if (tmp.length() != src.length() || !tmp.renameTo(dst)) {
+                tmp.delete();
+                call.reject("A másolás nem sikerült: " + dst.getPath());
+                return;
+            }
+            JSObject r = new JSObject();
+            r.put("path", dst.getPath());
+            r.put("size", dst.length());
+            call.resolve(r);
+        } catch (Exception e) {
+            if (tmp != null && tmp.exists()) {
+                tmp.delete();
+            }
+            call.reject(msg(e));
+        }
+    }
+
+    /** A mappa fájljainak nevei (almappák nélkül). Ha nincs ilyen mappa: üres lista. */
+    @PluginMethod
+    public void listFiles(PluginCall call) {
+        try {
+            File dir = new File(call.getString("dir", ""));
+            JSArray names = new JSArray();
+            File[] list = dir.isDirectory() ? dir.listFiles() : null;
+            if (list != null) {
+                for (File f : list) {
+                    if (f.isFile()) {
+                        names.put(f.getName());
+                    }
+                }
+            }
+            JSObject r = new JSObject();
+            r.put("files", names);
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject(msg(e));
+        }
+    }
+
+    /** Csak a saját biztonsági másolat (…_elotte_ÉÉÉÉHHNN_ÓÓPPMM.db) törölhető. */
+    @PluginMethod
+    public void deleteFile(PluginCall call) {
+        try {
+            File f = new File(call.getString("path", ""));
+            if (!f.getName().matches("^[A-Za-z0-9_]+_elotte_\\d{8}_\\d{6}\\.db$")) {
+                call.reject("Csak biztonsági másolat törölhető");
+                return;
+            }
+            if (f.isFile() && !f.delete()) {
+                call.reject("A fájl nem törölhető: " + f.getPath());
+                return;
+            }
+            call.resolve();
+        } catch (Exception e) {
+            call.reject(msg(e));
+        }
+    }
+
+    // ------------------------------------------------------------------ offline (MHTML) fájlok indexe
+
+    // A fájlnévben lévő azonosító: _id123_ (a könyvjelző saját azonosítója) vagy _idHR<14 hexa>_ (a Hír-Radarból exportált cikk,
+    // az URL-ből számolt kóddal). A kulcs: "123" illetve "HR…".
+    private static final Pattern MHTML_ID = Pattern.compile("_id(\\d+|HR[0-9a-f]{14})(?=[_.])");
+    private final Map<String, String> mhtmlIdx = new HashMap<>();
+    private final List<File> mhtmlDirs = new ArrayList<>();
+    private String mhtmlRoot = null;
+    private long mhtmlSig = 0;
+
+    private long mhtmlSignature(File root) {
+        long sig = root.lastModified();
+        for (File d : mhtmlDirs) {
+            sig = sig * 31 + d.lastModified();
+        }
+        return sig;
+    }
+
+    /** A mappa (és almappái) fájlneveinek beolvasása; csak akkor fut újra, ha a mappa változott (vagy kérik). */
+    private synchronized void ensureMhtmlIndex(File root, boolean force) {
+        String key = root.getAbsolutePath();
+        if (!force && key.equals(mhtmlRoot) && mhtmlSignature(root) == mhtmlSig) {
+            return;
+        }
+        mhtmlIdx.clear();
+        mhtmlDirs.clear();
+        List<File> stack = new ArrayList<>();
+        stack.add(root);
+        while (!stack.isEmpty()) {
+            File dir = stack.remove(stack.size() - 1);
+            mhtmlDirs.add(dir);
+            String[] names = dir.list();
+            if (names == null) {
+                continue;
+            }
+            for (String n : names) {
+                String low = n.toLowerCase(Locale.ROOT);
+                if (low.endsWith(".mhtml") || low.endsWith(".mht")) {
+                    Matcher m = MHTML_ID.matcher(n);
+                    if (m.find()) {
+                        String k = m.group(1);
+                        String old = mhtmlIdx.get(k);
+                        // több fájl ugyanazzal az azonosítóval: a névben szereplő dátum szerint a későbbi marad
+                        if (old == null || n.compareTo(new File(old).getName()) > 0) {
+                            mhtmlIdx.put(k, new File(dir, n).getAbsolutePath());
+                        }
+                    }
+                } else {
+                    File sub = new File(dir, n);
+                    if (sub.isDirectory()) {
+                        stack.add(sub);
+                    }
+                }
+            }
+        }
+        mhtmlRoot = key;
+        mhtmlSig = mhtmlSignature(root);
+    }
+
+    /** A megadott kulcsokhoz (azonosítók) tartozó MHTML fájlok: {exists, count, found: {kulcs: útvonal}}. */
+    @PluginMethod
+    public void findMhtmlMany(PluginCall call) {
+        try {
+            String dir = call.getString("dir", "");
+            boolean refresh = Boolean.TRUE.equals(call.getBoolean("refresh", false));
+            JSArray ids = call.getArray("ids");
+            JSObject out = new JSObject();
+            JSObject found = new JSObject();
+            File root = new File(dir == null ? "" : dir);
+            if (!root.isDirectory()) {
+                out.put("exists", false);
+                out.put("count", 0);
+                out.put("found", found);
+                call.resolve(out);
+                return;
+            }
+            ensureMhtmlIndex(root, refresh);
+            if (ids != null) {
+                synchronized (this) {
+                    for (int i = 0; i < ids.length(); i++) {
+                        String id = String.valueOf(ids.get(i));
+                        String p = mhtmlIdx.get(id);
+                        if (p != null) {
+                            found.put(id, p);
+                        }
+                    }
+                }
+            }
+            out.put("exists", true);
+            out.put("count", mhtmlIdx.size());
+            out.put("found", found);
+            call.resolve(out);
         } catch (Exception e) {
             call.reject(msg(e));
         }

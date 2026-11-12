@@ -1,6 +1,6 @@
 {
   "name": "bm-mobil-app",
-  "version": "0.1.0",
+  "version": "3.0.0",
   "private": true,
   "description": "BM Mobil Android alkalmazás - könyvjelző-kezelő natív SQLite-tal",
   "scripts": {

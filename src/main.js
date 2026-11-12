@@ -1,16 +1,20 @@
 import { registerPlugin } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
+import { normalizeTags } from './tags.js';
+import { mhtmlHashId } from './urlutil.js';
+import { createMerge } from './merge.js';
 
 // Saját natív plugin (android-extra/BmPlugin.java). A __MOCK_BM__ csak az automatikus tesztekhez van.
 const BM = window.__MOCK_BM__ || registerPlugin('BmNative');
 
-const VERSION = 'v2.0';
+const VERSION = 'v3.0';
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const errText = e => (e && (e.message || e.errorMessage)) || String(e);
 
 const DEFAULT_DB = '/storage/emulated/0/Norbi/bookmarks.db';
-const DEFAULT_MHTML = '/storage/emulated/0/Norbi/MHTML';
+const DEFAULT_MHTML = '/storage/emulated/0/Norbi/BM-manager/MHTML';
+const DEFAULT_MERGE_DIR = '/storage/emulated/0/Norbi/Osszevonas';
 
 $('ver').textContent = VERSION;
 document.title = 'BM Mobil ' + VERSION;
@@ -23,7 +27,8 @@ let sortMode = 'random';                       // random | idasc | iddesc
 let lastAction = null, searchTimer = null, renderTok = 0, statsTok = 0;
 let rowsVisible = true, tagsExpanded = true;
 let pendingShare = null;                       // megosztott szöveg, ami DB megnyitására vár
-let allTagsCache = null, allTagsLoading = null;
+let allTagsCache = null, allTagsLoading = null, cmapCache = null;
+let allTagCounts = new Map();                  // kisbetűs alak → [megjelenített alak, darab]
 const modalStack = [];
 
 // ── tárolás (csak az eszközön) ──────────────────────────────────────────────────
@@ -93,7 +98,7 @@ async function openDatabase(path, quiet) {
     }
     const r = await BM.openDb({ path });
     await ensureColumns();
-    dbOpen = true; dbPath = path; allTagsCache = null; allTagsLoading = null; lastAction = null;
+    dbOpen = true; dbPath = path; allTagsCache = null; allTagsLoading = null; cmapCache = null; lastAction = null;
     setDbLabel(`${path.split('/').pop()} · ${(r.size / 1048576).toFixed(1)} MB`);
     $('db-btn').textContent = '🔄 DB';
     await loadRecords();
@@ -178,8 +183,10 @@ async function showSettings() {
   $('mhtml-path-input').value = lsGet('bm_mhtml_base_path', '') || DEFAULT_MHTML;
   const c = getStoredColors();
   Object.entries(COLOR_INPUT_MAP).forEach(([k, key]) => { $('col-' + k).value = c[key]; $('prev-' + k).style.background = c[key]; });
+  $('mhtml-result').style.display = 'none';
   showModal('color-modal-overlay');
   await refreshPendingCount();
+  refreshMhtmlSummary();
 }
 $('btn-colors').onclick = showSettings;
 $('color-apply-btn').onclick = () => {
@@ -194,7 +201,51 @@ $('color-reset-btn').onclick = () => {
 };
 $('mhtml-path-save').onclick = () => {
   const v = $('mhtml-path-input').value.trim().replace(/\/+$/, '');
-  lsSet('bm_mhtml_base_path', v); toast('✅ MHTML mappa mentve');
+  if (v && v !== DEFAULT_MHTML) lsSet('bm_mhtml_base_path', v); else lsDel('bm_mhtml_base_path');
+  toast('✅ MHTML mappa mentve'); refreshMhtmlSummary(); refreshOpenBtn(cur);
+};
+
+// ── 📄 MHTML-lista a Vivaldi MHTML Mentőnek ────────────────────────────────────
+// Csak a 🔐 védett cikkek (azok biztosan megtartandók). Sor: azonosító|dátum|cím|webcím. Hogy mi van már lementve, azt kizárólag
+// a mappában lévő fájlok mutatják (…_id<azonosító>_… vagy a Hír-Radarból exportáltaknál …_idHR<kód>_…).
+const MHTML_COND = `protected = 1 AND ${PEND_NONE}`;
+let mhtmlRows = [], mhtmlHave = {}, mhtmlNoUrl = 0;
+const mhtmlHas = r => !!(mhtmlHave[String(r.id)] || mhtmlHave[r.hid]);
+const mhtmlWanted = () => ($('mhtml-only-missing').checked ? mhtmlRows.filter(r => !mhtmlHas(r)) : mhtmlRows);
+function paintMhtmlSummary() {
+  const miss = mhtmlRows.filter(r => !mhtmlHas(r)).length, n = mhtmlWanted().length;
+  $('mhtml-summary').innerHTML = `🔐 védett cikk: <b>${fmt(mhtmlRows.length)}</b> · offline már megvan: <b>${fmt(mhtmlRows.length - miss)}</b> · még nincs: <b>${fmt(miss)}</b>` +
+    `<br>A listába kerül: <b>${fmt(n)}</b> cikk` + (mhtmlNoUrl ? `<br>⚠️ webcím nélküli védett cikk (kimarad): ${fmt(mhtmlNoUrl)}` : '');
+  $('mhtml-list-btn').disabled = !n;
+}
+async function refreshMhtmlSummary() {
+  if (!dbOpen) { $('mhtml-summary').textContent = 'Nincs megnyitott adatbázis'; $('mhtml-list-btn').disabled = true; return; }
+  $('mhtml-summary').textContent = 'Számolás…';
+  try {
+    const rows = await qRows(`SELECT id, url, title, add_date FROM bookmarks WHERE ${MHTML_COND} ORDER BY add_date, id`);
+    mhtmlNoUrl = rows.filter(r => !String(r[1] || '').trim()).length;
+    mhtmlRows = rows.filter(r => String(r[1] || '').trim()).map(([id, url, title, date]) => ({ id, url: String(url).trim(), title: title || '', date: date || '', hid: mhtmlHashId(url) }));
+    const keys = []; for (const r of mhtmlRows) { keys.push(String(r.id), r.hid); }
+    const r = await BM.findMhtmlMany({ dir: getMhtmlDir(), ids: keys, refresh: true }).catch(() => null);
+    mhtmlHave = (r && r.found) || {};
+    paintMhtmlSummary();
+    if (r && r.exists === false) $('mhtml-summary').innerHTML += '<br>⚠️ Az MHTML mappa nem létezik – minden cikk „még nincs mentve"-nek számít.';
+  } catch (e) { $('mhtml-summary').textContent = '❌ ' + errText(e); }
+}
+$('mhtml-only-missing').onchange = paintMhtmlSummary;
+$('mhtml-list-btn').onclick = async () => {
+  const rows = mhtmlWanted();
+  if (!rows.length) { toast('Nincs mit kiírni'); return; }
+  const clean = t => String(t).replace(/[|\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const text = rows.map(r => `${r.id}|${r.date}|${clean(r.title)}|${r.url}`).join('\n') + '\n';
+  const d = new Date();
+  const path = `${dirOf(dbPath)}/mhtml_lista_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.txt`;
+  try {
+    await BM.writeText({ path, text });
+    const box = $('mhtml-result'); box.style.display = '';
+    box.innerHTML = `✅ Kiírva: <b>${fmt(rows.length)}</b> cikk<br><span class="mono">${esc(path)}</span><br>Töltsd be a Vivaldi MHTML Mentő bővítményben.`;
+    toast(`📄 Lista kiírva (${fmt(rows.length)} cikk)`, 3500);
+  } catch (e) { toast('❌ ' + errText(e), 5000); }
 };
 
 // ── összes törlésre jelölt törlése ─────────────────────────────────────────────
@@ -239,6 +290,12 @@ function getMissingSel() {
   catch { return { tags: true, note: false, title: false, date: false, logic: 'or' }; }
 }
 
+function missWhere() {
+  const s = getMissingSel();
+  const parts = ['tags', 'note', 'title', 'date'].filter(k => s[k]).map(k => MISS_COND[k]);
+  return parts.length ? '(' + parts.join(s.logic === 'and' ? ' AND ' : ' OR ') + ')' : '';
+}
+
 function buildWhere() {
   const f = loadFlags();
   const where = [], params = [];
@@ -247,9 +304,7 @@ function buildWhere() {
   else if (viewMode === 'later') { where.push(PEND_NONE); where.push('is_read = 1'); }
   else if (viewMode === 'missing') {
     where.push(PEND_NONE);
-    const s = getMissingSel();
-    const parts = ['tags', 'note', 'title', 'date'].filter(k => s[k]).map(k => MISS_COND[k]);
-    if (parts.length) where.push('(' + parts.join(s.logic === 'and' ? ' AND ' : ' OR ') + ')');
+    const mw = missWhere(); if (mw) where.push(mw);
   } else { where.push(PEND_NONE); where.push('(is_read IS NULL OR is_read = 0)'); }
 
   if (f.q.length >= 3) {
@@ -292,21 +347,29 @@ async function getRecord(id) {
   return { id: r[0], domain: r[1], custom_tags: r[2], add_date: r[3], title: r[4], protected: r[5], is_read: r[6], pending_delete: r[7], url: r[8], local_path: r[9] || '', note: r[10] || '' };
 }
 
-// ── statisztika (egyetlen lekérdezés) ───────────────────────────────────────────
+// ── statisztika (két gyors lekérdezés) ──────────────────────────────────────────
+// A gombsor számai ugyanazt a feltételt használják, mint a hozzájuk tartozó lista (buildWhere).
+function fitModeNums() {
+  document.querySelectorAll('#mode-row .mn').forEach(e => e.classList.toggle('long', e.textContent.length >= 7));
+}
 async function updateStats() {
   if (!dbOpen) return;
   const tok = ++statsTok;
   try {
     const rows = await qRows(`SELECT COUNT(*),
-      SUM(CASE WHEN ${PEND_NONE} THEN 1 ELSE 0 END),
       SUM(CASE WHEN ${PEND_SOME} THEN 1 ELSE 0 END),
       SUM(CASE WHEN protected = 1 AND ${PEND_NONE} THEN 1 ELSE 0 END),
-      SUM(CASE WHEN is_read = 1 AND ${PEND_NONE} THEN 1 ELSE 0 END)
+      SUM(CASE WHEN is_read = 1 AND ${PEND_NONE} THEN 1 ELSE 0 END),
+      SUM(CASE WHEN ${PEND_NONE} AND (is_read IS NULL OR is_read = 0) THEN 1 ELSE 0 END)
       FROM bookmarks`);
+    const mw = missWhere();
+    const miss = mw ? await qVal(`SELECT COUNT(*) FROM bookmarks WHERE ${PEND_NONE} AND ${mw}`) : 0;
     if (tok !== statsTok || !rows.length) return;
     const r = rows[0];
-    $('stat-total').textContent = fmt(r[0]); $('stat-live').textContent = fmt(r[1]);
-    $('stat-pend').textContent = fmt(r[2]); $('stat-prot').textContent = fmt(r[3]); $('stat-read').textContent = fmt(r[4]);
+    $('stat-total').textContent = fmt(r[0]); $('stat-pend').textContent = fmt(r[1]);
+    $('stat-prot').textContent = fmt(r[2]); $('stat-read').textContent = fmt(r[3]); $('stat-live').textContent = fmt(r[4]);
+    $('stat-miss').textContent = fmt(miss);
+    fitModeNums();
   } catch { /* a statisztika nem kritikus */ }
 }
 
@@ -350,6 +413,7 @@ function paintCard(r) {
   if (r.local_path && String(r.local_path).trim()) si += (si ? ' ' : '') + '📂';
   $('card-status-icons').textContent = si;
   $('act-open').style.borderColor = (r.local_path && String(r.local_path).trim()) ? 'var(--green)' : '';
+  refreshOpenBtn(r);
 
   const tagsEl = $('card-tags'), tb = $('tags-toggle-btn');
   if (r.custom_tags && String(r.custom_tags).trim()) {
@@ -399,7 +463,7 @@ const modeBtnMap = { missing: 'btn-mode-missing', protected: 'btn-mode-prot', la
 const modeCls = { missing: 'on-green', protected: 'on-purple', later: 'on-amber', pending: 'on-red', normal: 'on' };
 function setMode(mode, focusId) {
   viewMode = mode;
-  Object.keys(modeBtnMap).forEach(m => { const b = $(modeBtnMap[m]); b.className = 'nb'; if (m === mode) b.classList.add(modeCls[m]); });
+  Object.keys(modeBtnMap).forEach(m => { const b = $(modeBtnMap[m]); b.className = 'nb mb'; if (m === mode) b.classList.add(modeCls[m]); });
   idx = 0; return loadRecords(focusId);
 }
 $('btn-mode-prot').onclick = () => setMode('protected');
@@ -418,7 +482,7 @@ $('miss-apply-btn').onclick = () => {
   const s = { tags: $('miss-tags').checked, note: $('miss-note').checked, title: $('miss-title').checked, date: $('miss-date').checked, logic: $('miss-and').checked ? 'and' : 'or' };
   if (!s.tags && !s.note && !s.title && !s.date) { toast('⚠️ Jelölj be legalább egy mezőt'); return; }
   lsSet('bm_missing_sel', JSON.stringify(s));
-  closeModal('missing-modal-overlay'); setMode('missing');
+  closeModal('missing-modal-overlay'); setMode('missing'); updateStats();
 };
 
 // ── keresés ─────────────────────────────────────────────────────────────────────
@@ -500,21 +564,42 @@ $('act-read').onclick = doRead;
 $('act-del').onclick = doDelete;
 $('btn-undo').onclick = doUndo;
 
-// ── megnyitás: rövid = web, hosszú (3 mp) = offline MHTML ──────────────────────
-async function doOpen() {
+// ── megnyitás: rövid = offline MHTML (ha van), különben web | hosszú (3 mp) = csak web ──────────
+// A fájlnévben a cikk azonosítója: …_id123_….mhtml (BM-ből mentett) vagy …_idHR<hash>_….mhtml (a Hír-Radarból exportált cikk,
+// az URL-ből számolt kóddal). A mappa tartalma az egyetlen igazság: ami ott van, az offline nyílik.
+async function findOfflineFor(rec) {
+  if (!rec) return '';
+  const keys = [String(rec.id)]; if (rec.url) keys.push(mhtmlHashId(rec.url));
+  try {
+    const r = await BM.findMhtmlMany({ dir: getMhtmlDir(), ids: keys });
+    const f = (r && r.found) || {};
+    return f[keys[0]] || (keys[1] && f[keys[1]]) || '';
+  } catch { return ''; }
+}
+let openTok = 0;
+async function refreshOpenBtn(r) {
+  const t = ++openTok, b = $('act-open');
+  b.textContent = '🌐'; b.classList.remove('offline');
+  b.title = 'Rövid: web | Hosszú (3mp): csak web';
+  if (!r) return;
+  const p = await findOfflineFor(r);
+  if (t !== openTok || !p) return;
+  b.textContent = '📄'; b.classList.add('offline'); b.title = 'Rövid: offline MHTML | Hosszú (3mp): web';
+}
+async function doOpenWeb() {
   const r = currentRec();
   if (!r || !r.url) { toast('⚠️ Nincs webcím'); return; }
   try { await BM.openUrl({ url: r.url }); } catch (e) { toast('❌ ' + errText(e), 4000); }
 }
-async function doOpenOffline() {
+async function doOpenSmart() {
   const r = currentRec();
   if (!r) { toast('⚠️ Nincs aktuális cikk'); return; }
-  try {
-    const f = await BM.findMhtml({ dir: getMhtmlDir(), id: r.id });
-    if (!f.path) { toast(`⚠️ Nincs offline fájl (id${r.id}) → web megnyitása`, 3000); doOpen(); return; }
-    toast('📂 Offline megnyitás…');
-    await BM.openFile({ path: f.path });
-  } catch (e) { toast('❌ ' + errText(e), 5000); }
+  const path = await findOfflineFor(r);
+  if (path) {
+    try { await BM.openFile({ path }); return; }
+    catch (e) { toast('⚠️ Az offline fájl nem nyílt meg (' + errText(e) + ') – megnyitom a böngészőben', 4000); }
+  }
+  doOpenWeb();
 }
 (function setupOpenBtn() {
   const btn = $('act-open');
@@ -522,15 +607,30 @@ async function doOpenOffline() {
   const clear = () => { clearTimeout(timer); timer = null; btn.style.transform = ''; };
   btn.addEventListener('pointerdown', () => {
     pressed = true; longDone = false; btn.style.transform = 'scale(0.92)';
-    timer = setTimeout(() => { if (!pressed) return; longDone = true; clear(); doOpenOffline(); }, 3000);
+    timer = setTimeout(() => { if (!pressed) return; longDone = true; clear(); doOpenWeb(); }, 3000);
   });
-  btn.addEventListener('pointerup', () => { const fire = pressed && !longDone; pressed = false; clear(); if (fire) doOpen(); });
+  btn.addEventListener('pointerup', () => { const fire = pressed && !longDone; pressed = false; clear(); if (fire) doOpenSmart(); });
   btn.addEventListener('pointercancel', () => { pressed = false; clear(); });
   btn.addEventListener('pointerleave', () => { pressed = false; clear(); });
   btn.addEventListener('contextmenu', e => e.preventDefault());
 })();
 
 // ── címkék ──────────────────────────────────────────────────────────────────────
+// opcionális tag_case_map.json (a BM tisztító készíti): az adatbázis mappájában
+async function getCmap() {
+  if (cmapCache) return cmapCache;
+  cmapCache = {};
+  try {
+    const r = await BM.readText({ path: dirOf(dbPath) + '/tag_case_map.json' });
+    if (r && r.exists && r.text) {
+      const d = JSON.parse(r.text);
+      if (d && typeof d === 'object' && !Array.isArray(d)) cmapCache = Object.fromEntries(Object.entries(d).map(([k, v]) => [String(k), String(v)]));
+    }
+  } catch { /* nincs vagy hibás: alapszabály */ }
+  return cmapCache;
+}
+function dirOf(p) { const i = String(p).lastIndexOf('/'); return i > 0 ? String(p).slice(0, i) : ''; }
+
 async function loadAllTags() {
   if (allTagsCache) return allTagsCache;
   if (!allTagsLoading) {
@@ -538,13 +638,33 @@ async function loadAllTags() {
       const cnt = new Map();
       for (const t of vals) {
         if (!t) continue;
-        for (let tag of String(t).split(',')) { tag = tag.trim(); if (tag) cnt.set(tag, (cnt.get(tag) || 0) + 1); }
+        for (let tag of String(t).split(',')) {
+          tag = tag.trim(); if (!tag) continue;
+          const k = tag.toLowerCase(), e = cnt.get(k);
+          if (e) e[1]++; else cnt.set(k, [tag, 1]);
+        }
       }
-      allTagsCache = [...cnt.keys()].sort((a, b) => a.localeCompare(b, 'hu'));
+      allTagCounts = cnt;
+      allTagsCache = [...cnt.values()].map(e => e[0]).sort((a, b) => a.localeCompare(b, 'hu'));
       return allTagsCache;
     }).finally(() => { allTagsLoading = null; });
   }
   return allTagsLoading;
+}
+
+// A javaslatok sorrendje: pontos egyezés; egy szavas címkék (előbb „ezzel kezdődik", utána „tartalmazza");
+// végül a többszavas címkék (ugyanígy). Egy csoporton belül a gyakoribb van elöl, utána betűrend.
+function rankTags(qs) {
+  const exact = [], sStart = [], sCont = [], mStart = [], mCont = [];
+  for (const [k, e] of allTagCounts) {
+    if (k === qs) { exact.push(e); continue; }
+    const single = !/\s/.test(k);
+    if (k.startsWith(qs)) (single ? sStart : mStart).push(e);
+    else if (k.includes(qs)) (single ? sCont : mCont).push(e);
+  }
+  const cmp = (a, b) => b[1] - a[1] || a[0].toLowerCase().localeCompare(b[0].toLowerCase(), 'hu');
+  for (const g of [sStart, sCont, mStart, mCont]) g.sort(cmp);
+  return { exact, hits: [...exact, ...sStart, ...sCont, ...mStart, ...mCont] };
 }
 
 const TAG_LIMIT = 400;
@@ -555,36 +675,73 @@ async function updateTagResults() {
   const box = $('tag-results'), info = $('tag-results-info');
   if (q.length < 3) { box.innerHTML = ''; info.style.display = 'none'; return; }     // 3. karakterig semmit nem mutat
   info.style.display = ''; if (!allTagsCache) info.textContent = 'Címkék betöltése…';
-  let tags;
-  try { tags = await loadAllTags(); } catch (e) { info.textContent = '❌ ' + errText(e); return; }
+  try { await loadAllTags(); } catch (e) { info.textContent = '❌ ' + errText(e); return; }
   if (tok !== tagSearchTok) return;
-  const hits = tags.filter(t => t.toLowerCase().includes(q));
+  const hits = rankTags(q).hits.map(e => e[0]);
   box.innerHTML = hits.slice(0, TAG_LIMIT).map(t => `<span class="top-tag" data-tag="${esc(t)}">${esc(t)}</span>`).join('');
   info.textContent = hits.length ? `${fmt(hits.length)} találat${hits.length > TAG_LIMIT ? ` (az első ${TAG_LIMIT} látszik – írj még be karaktert)` : ''} – koppints a hozzáadáshoz:` : 'Nincs ilyen címke.';
 }
 $('tag-search').addEventListener('input', updateTagResults);
 $('tag-results').addEventListener('click', e => { const t = e.target.closest('.top-tag'); if (t) addTag(t.dataset.tag); });
 
+// javaslatok a „A cikk címkéi" mezőbe gépelve: az utolsó vesszőig tartó szó 3. karakterétől
+const SUG_LIMIT = 40;
+let sugTok = 0;
+const lastFrag = v => v.slice(v.lastIndexOf(',') + 1).trim();
+async function updateTagSuggest() {
+  const tok = ++sugTok;
+  const box = $('tags-suggest'), info = $('tags-suggest-info');
+  const frag = lastFrag($('tags-new-input').value);
+  if (frag.length < 3) { box.innerHTML = ''; info.style.display = 'none'; return; }
+  info.style.display = ''; if (!allTagsCache) info.textContent = 'Címkék betöltése…';
+  try { await loadAllTags(); } catch (e) { info.textContent = '❌ ' + errText(e); return; }
+  const cmap = await getCmap().catch(() => null);
+  if (tok !== sugTok) return;
+  const qs = frag.toLowerCase();
+  const { exact, hits } = rankTags(qs);
+  const have = new Set($('tags-new-input').value.split(',').slice(0, -1).map(t => t.trim().toLowerCase()));
+  const list = hits.map(e => e[0]).filter(t => !have.has(t.toLowerCase()));
+  const newForm = normalizeTags(frag, cmap);
+  const showNew = newForm && !exact.length && !have.has(newForm.toLowerCase());
+  box.innerHTML = list.slice(0, SUG_LIMIT).map(t => `<span class="top-tag" data-tag="${esc(t)}">${esc(t)}</span>`).join('') +
+    (showNew ? `<span class="top-tag new-tag" data-new="1" data-tag="${esc(newForm)}">➕ új: ${esc(newForm)}</span>` : '');
+  info.textContent = list.length
+    ? `${fmt(list.length)} javaslat${list.length > SUG_LIMIT ? ` (az első ${SUG_LIMIT} látszik – írj még be karaktert)` : ''} – koppints a beillesztéshez:`
+    : (showNew ? 'Nincs ilyen címke – újként felvehető:' : 'Nincs több javaslat.');
+}
+$('tags-new-input').addEventListener('input', updateTagSuggest);
+$('tags-suggest').addEventListener('click', e => {
+  const t = e.target.closest('.top-tag'); if (!t) return;
+  const inp = $('tags-new-input');
+  const parts = inp.value.split(',').map(x => x.trim());
+  parts.pop();                                         // az éppen gépelt töredék helyére kerül a választott címke
+  if (!parts.some(x => x.toLowerCase() === t.dataset.tag.toLowerCase())) parts.push(t.dataset.tag);
+  inp.value = parts.filter(Boolean).join(', ') + ', ';
+  $('tags-suggest').innerHTML = ''; $('tags-suggest-info').style.display = 'none'; sugTok++;
+  inp.focus();
+});
+
 function addTag(tag) {
   const inp = $('tags-new-input');
   const arr = inp.value.trim() ? inp.value.split(',').map(t => t.trim()).filter(Boolean) : [];
-  if (!arr.includes(tag)) { arr.push(tag); inp.value = arr.join(', '); }
+  if (!arr.some(x => x.toLowerCase() === tag.toLowerCase())) { arr.push(tag); inp.value = arr.join(', '); }
 }
 $('btn-tags-open').onclick = () => {
   const r = currentRec();
   $('tags-article-title').textContent = r ? (r.title || r.url || '') : '';
   $('tags-new-input').value = r ? (r.custom_tags || '') : '';
   $('tag-search').value = ''; $('tag-results').innerHTML = ''; $('tag-results-info').style.display = 'none';
+  $('tags-suggest').innerHTML = ''; $('tags-suggest-info').style.display = 'none'; sugTok++;
   showModal('tags-modal-overlay');
   if (dbOpen) loadAllTags().catch(() => { /* a keresésnél kiderül */ });       // háttérben előre betölti
 };
 $('tags-save-btn').onclick = async () => {
   const r = currentRec(); if (!r) return;
-  const val = $('tags-new-input').value.trim();
   try {
+    const val = normalizeTags($('tags-new-input').value, await getCmap());
     await run('UPDATE bookmarks SET custom_tags = ? WHERE id = ?', [val, r.id]);
     r.custom_tags = val; allTagsCache = null;
-    closeModal('tags-modal-overlay'); toast('✅ Címkék mentve'); paintCard(r);
+    closeModal('tags-modal-overlay'); toast(val ? '✅ Címkék mentve' : '✅ Címkék törölve'); paintCard(r);
   } catch (e) { toast('❌ ' + errText(e), 4000); }
 };
 
@@ -664,6 +821,18 @@ $('share-save-btn').onclick = async () => {
 window.__bmShare = handleShared;               // a teszteléshez
 try { BM.addListener('shared', handleShared); } catch { /* böngészőben nincs */ }
 async function checkShared() { try { const d = await BM.getShared(); if (d && d.text) handleShared(d); } catch { /* nincs megosztás */ } }
+
+// ── összevonás másik bookmarks.db-vel ──────────────────────────────────────────
+const mergeUi = createMerge({
+  $, BM, qRows, qVal, run, toast, fmt, esc, errText, showModal, lsGet, lsSet, lsDel, dirOf, pad,
+  defaultDir: DEFAULT_MERGE_DIR, mergeDir: () => lsGet('bm_path_merge', '') || DEFAULT_MERGE_DIR,
+  dbPath: () => dbPath, isOpen: () => dbOpen,
+  onDone: async () => {
+    allTagsCache = null; allTagsLoading = null; cmapCache = null; lastAction = null;
+    await ensureColumns(); await loadRecords(); updateStats(); refreshPendingCount();
+  },
+});
+$('merge-open-btn').onclick = () => { if (!dbOpen) { toast('⚠️ Előbb nyisd meg az adatbázist'); return; } closeModal('color-modal-overlay'); mergeUi.open(); };
 
 // ── indulás ─────────────────────────────────────────────────────────────────────
 (async () => {
