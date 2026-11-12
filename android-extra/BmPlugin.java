@@ -296,7 +296,7 @@ public class BmPlugin extends Plugin {
                 arr.put(c.getLong(i));
                 break;
             case Cursor.FIELD_TYPE_FLOAT:
-                arr.put(c.getDouble(i));
+                arr.put(Double.valueOf(c.getDouble(i)));
                 break;
             case Cursor.FIELD_TYPE_STRING:
                 arr.put(c.getString(i));
