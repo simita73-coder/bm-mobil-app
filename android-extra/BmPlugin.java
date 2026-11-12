@@ -19,6 +19,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -214,7 +215,7 @@ public class BmPlugin extends Plugin {
         return out;
     }
 
-    private void bindAll(SQLiteStatement st, JSArray params) throws Exception {
+    private void bindAll(SQLiteStatement st, JSONArray params) throws Exception {
         if (params == null) {
             return;
         }
