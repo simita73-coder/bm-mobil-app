@@ -3,11 +3,12 @@ import { App as CapApp } from '@capacitor/app';
 import { normalizeTags } from './tags.js';
 import { mhtmlHashId } from './urlutil.js';
 import { createMerge } from './merge.js';
+import { createDupes } from './dupes.js';
 
 // Saját natív plugin (android-extra/BmPlugin.java). A __MOCK_BM__ csak az automatikus tesztekhez van.
 const BM = window.__MOCK_BM__ || registerPlugin('BmNative');
 
-const VERSION = 'v3.0';
+const VERSION = 'v3.1';
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const errText = e => (e && (e.message || e.errorMessage)) || String(e);
@@ -122,6 +123,7 @@ function showModal(id) {
 function closeModal(id) {
   $(id).classList.remove('show');
   const i = modalStack.indexOf(id); if (i >= 0) modalStack.splice(i, 1);
+  if (id === 'dup-modal-overlay') dupClosed();
 }
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeModal(b.dataset.close)));
 document.querySelectorAll('.modal-overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o) closeModal(o.id); }));
@@ -833,6 +835,15 @@ const mergeUi = createMerge({
   },
 });
 $('merge-open-btn').onclick = () => { if (!dbOpen) { toast('⚠️ Előbb nyisd meg az adatbázist'); return; } closeModal('color-modal-overlay'); mergeUi.open(); };
+
+// ── duplikációk ─────────────────────────────────────────────────────────────────
+const dupUi = createDupes({ $, BM, qRows, qVal, run, toast, fmt, esc, errText, showModal, lsGet, lsSet, PEND_NONE, getCmap });
+async function dupClosed() {                       // az ablak bezárásakor frissül a lista és a számok, ha töröltünk
+  if (!dupUi.isDirty()) return;
+  dupUi.clean(); allTagsCache = null; allTagsLoading = null; lastAction = null;
+  try { await loadRecords(); updateStats(); refreshPendingCount(); } catch { /* nem végzetes */ }
+}
+$('dup-open-btn').onclick = () => { if (!dbOpen) { toast('⚠️ Előbb nyisd meg az adatbázist'); return; } closeModal('color-modal-overlay'); dupUi.open(); };
 
 // ── indulás ─────────────────────────────────────────────────────────────────────
 (async () => {

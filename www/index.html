@@ -160,6 +160,24 @@ body.light .top-tag{background:#fff}
 .mg-line b{color:var(--txt)}
 .mg-file small{display:block;color:var(--txt3);font-size:11px;margin-top:2px}
 .mg-file.off label{color:var(--txt3)}
+#dup-results{display:flex;flex-direction:column;gap:12px}
+.dup-group{border:1px solid var(--border);border-radius:var(--r2);overflow:hidden}
+.dup-gtitle{font-size:11.5px;color:var(--txt3);padding:6px 10px;background:rgba(255,255,255,.04)}
+body.light .dup-gtitle{background:rgba(0,0,0,.04)}
+.dup-row{padding:9px 10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:4px}
+.dup-head{font-size:12px;color:var(--txt3)}.dup-id{font-weight:700;color:var(--txt);margin-right:6px}.dup-date{float:right}
+.dup-title{font-size:14px;font-weight:600;line-height:1.35}
+.dup-tags{font-size:11.5px;color:var(--tag-chip-color)}
+.dup-url{font-family:monospace;font-size:12.5px;line-height:1.5;word-break:break-all;overflow-wrap:anywhere;color:var(--txt2)}
+.dup-url .dd{color:#ff4d4d;font-weight:700;background:rgba(255,77,77,.14);border-radius:3px}
+.dup-btns{display:flex;gap:8px;margin-top:2px}
+.dup-btns button{flex:1;padding:9px 6px;border-radius:var(--r2);border:1px solid var(--border);background:var(--surface2,#1f2937);color:var(--txt);font-size:13px}
+.dup-btns .dup-del{border-color:#7f1d1d;color:#fca5a5}
+.dup-sec{border:1px solid var(--border);border-radius:var(--r2);padding:10px;display:flex;flex-direction:column;gap:8px}
+.dup-sec h4{margin:0;font-size:13.5px}
+.dup-num{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.dup-num input{width:84px;background:#000;border:1px solid rgba(255,255,255,.25);border-radius:var(--r2);color:var(--txt);padding:8px 10px;font-size:16px}
+body.light .dup-num input{background:#fff;border-color:rgba(0,0,0,.2)}
 #merge-log,#mhtml-result{white-space:pre-wrap;font-size:12.5px;line-height:1.6}
 
 .section{margin-bottom:6px;padding-bottom:14px;border-bottom:2px solid var(--blue);display:flex;flex-direction:column;gap:8px}
@@ -188,7 +206,7 @@ body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
 <div id="app">
 
   <div id="header">
-    <h1>BM Mobil <span id="ver">v3.0</span> <small id="db-lbl">Nincs adatbázis megnyitva</small></h1>
+    <h1>BM Mobil <span id="ver">v3.1</span> <small id="db-lbl">Nincs adatbázis megnyitva</small></h1>
     <button class="hb" id="toggle-rows-btn" title="Sorok elrejtése">▲</button>
     <button class="hb" id="theme-btn">🌙</button>
     <button class="hb primary" id="db-btn">📂 DB</button>
@@ -348,6 +366,12 @@ body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
       </div>
 
       <div class="section">
+        <h3>🔍 Duplikációk</h3>
+        <button class="big-btn" id="dup-open-btn">🔍 Duplikációk keresése…</button>
+        <div class="info">Egyforma URL-ű cikkek keresése; a találatoknál a teljes URL látszik, az eltérés pirossal, és kézzel törölheted a felesleges cikket.</div>
+      </div>
+
+      <div class="section">
         <h3>🔀 Összevonás másik bookmarks.db-vel</h3>
         <button class="big-btn" id="merge-open-btn">🔀 Összevonás megnyitása…</button>
         <div class="info">Két bookmarks.db cikkeinek egyesítése (mindkét irányban); közben az összes cikk címkéi egységes alakra javulnak. Előtte automatikus biztonsági mentés.</div>
@@ -371,6 +395,32 @@ body.light .hex-input{background:#fff;border-color:rgba(0,0,0,0.2)}
         <button class="color-apply-btn" id="color-apply-btn">✅ Alkalmaz</button>
         <button class="color-reset-btn" id="color-reset-btn">↩ Alapért.</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- DUPLIKÁCIÓK MODAL -->
+<div class="modal-overlay" id="dup-modal-overlay">
+  <div class="modal">
+    <div class="modal-hdr"><h2>🔍 Duplikációk</h2><button class="modal-close" data-close="dup-modal-overlay">✕</button></div>
+    <div class="modal-body">
+      <div class="dup-sec"><h4>1. Slash eltérés<span id="dup-cnt-slash"></span></h4>
+        <div class="info">Azonos URL, a végi „/" jel eltérésével.</div>
+        <button class="big-btn2" id="dup-slash">🔎 Keresés</button></div>
+      <div class="dup-sec"><h4>2. Paraméter eltérés<span id="dup-cnt-param"></span></h4>
+        <div class="info">Azonos URL a ?paraméterek és a #töredék nélkül (kisbetűvel; a YouTube v= marad).</div>
+        <button class="big-btn2" id="dup-param">🔎 Keresés</button></div>
+      <div class="dup-sec"><h4>3. Kombinált keresés<span id="dup-cnt-combined"></span></h4>
+        <div class="dup-num"><label for="dup-prefix">Kezdet (karakter):</label><input type="number" inputmode="numeric" min="0" max="500" id="dup-prefix"></div>
+        <div class="dup-num"><label for="dup-len">Hossz eltérés:</label><input type="number" inputmode="numeric" min="0" max="100" id="dup-len"><span class="info">(0 = nem számít)</span></div>
+        <button class="big-btn2" id="dup-comb">🔎 Keresés</button>
+        <div class="info">Azonos domain, azonos URL-eleje és legfeljebb ennyi karakter hosszeltérés. Csak listáz.</div></div>
+      <div class="mg-line" id="dup-sum">–</div>
+      <div id="dup-results"></div>
+      <div id="dup-nav" style="display:none;gap:10px;align-items:center;justify-content:center">
+        <button class="big-btn2" id="dup-prev" style="flex:1">◀ Előző</button><span id="dup-page" style="font-size:13px">1 / 1</span><button class="big-btn2" id="dup-next" style="flex:1">Következő ▶</button>
+      </div>
+      <p class="info">A keresés nem töröl. A 🗑 Törlés véglegesen töröl egy cikket (védettet is, megerősítéssel); ha a megmaradó cikk kevesebb adatot tartalmaz (címke, védett, olvasásra váró), megkapja a törölt cikktől. A törölt URL a deleted_log-ba kerül, kivéve ha a megmaradó cikknek ugyanaz az URL-je. A törlésre jelölt cikkek nem szerepelnek a keresésben.</p>
     </div>
   </div>
 </div>
